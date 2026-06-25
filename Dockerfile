@@ -1,34 +1,18 @@
-# 1. Usar uma imagem oficial do Python 3.10
+# 1. Usar uma imagem oficial leve do Python 3.10
 FROM python:3.10-slim
 
-# 2. Instalar dependências necessárias para o Flet
-RUN apt-get update && apt-get install -y \
-    libgtk-3-0 \
-    libgconf-2-4 \
-    libx11-6 \
-    libxext6 \
-    libxrender1 \
-    libxinerama1 \
-    libxfixes3 \
-    libxrandr2 \
-    libxcursor1 \
-    libxdamage1 \
-    libxtst6 \
-    && rm -rf /var/lib/apt/lists/*
-
-# 3. Definir o diretório de trabalho dentro do container
+# 2. Definir o diretório de trabalho
 WORKDIR /app
 
-# 4. Copiar os requisitos e instalar
+# 3. Copiar os requisitos e instalar
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiar o restante do código para o container
+# 4. Copiar o restante do código
 COPY . .
 
-# 6. Expor a porta que o Flet vai usar
+# 5. Expor a porta 8080
 EXPOSE 8080
 
-# 7. Comando para arrancar a aplicação
-# O Flet web corre numa porta específica definida pelo ambiente
+# 6. Comando para arrancar a aplicação
 CMD ["python", "main.py"]
