@@ -36,7 +36,6 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-    # Sintaxe de borda universal
     borda_padrao = ft.Border(
         left=ft.BorderSide(1, ft.Colors.GREY_300),
         top=ft.BorderSide(1, ft.Colors.GREY_300),
@@ -74,6 +73,7 @@ def main(page: ft.Page):
         row_progresso_mesas = ft.Row(alignment=ft.MainAxisAlignment.CENTER, wrap=True)
         lista_linhas = ft.Column(scroll=ft.ScrollMode.AUTO, height=400)
         txt_confirmacao = ft.Text("", size=16, weight="bold")
+        campo_pesquisa = ft.TextField(label="Pesquisar Eleitor", width=400)
         
         bs = ft.BottomSheet(content=ft.Container(padding=20, content=ft.Column([
             ft.Text("Confirmação de Voto", size=20, weight="bold"), 
@@ -86,8 +86,13 @@ def main(page: ft.Page):
         def processar_voto():
             supabase.table("eleitores").update({"Votou": True, "data_voto": datetime.now().isoformat()}).eq("id", bs.data).execute()
             registar_log(bs.data, estado_app["mesa_autenticada"])
+            
+            # Limpeza e reset
+            campo_pesquisa.value = ""
+            campo_pesquisa.update()
             bs.open = False
             carregar_tabela("")
+            
             page.snack_bar = ft.SnackBar(ft.Text("Voto registado com sucesso!"))
             page.snack_bar.open = True
             page.update()
@@ -122,6 +127,8 @@ def main(page: ft.Page):
                     ]), padding=5, border=borda_padrao))
             page.update()
 
+        campo_pesquisa.on_change = lambda e: carregar_tabela(e.control.value)
+        
         page.add(ft.Column([
             ft.Text("Eleições Casa do Pessoal da CMO (2026-2029)", size=22, weight="bold"),
             ft.Row([
@@ -130,7 +137,7 @@ def main(page: ft.Page):
                 ft.Card(ft.Container(ft.Column([ft.Text("Abstenção"), lbl_abstencao], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
                 ft.Container(content=ft.Column([ft.Text("Afluência Por Mesa"), row_progresso_mesas], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=10, border=borda_padrao, border_radius=10)
             ], alignment=ft.MainAxisAlignment.CENTER),
-            ft.TextField(label="Pesquisar Eleitor", width=400, on_change=lambda e: carregar_tabela(e.control.value)),
+            campo_pesquisa,
             ft.Container(content=ft.Row([ft.Text("Sócio", weight="bold", width=60), ft.Text("Nome", weight="bold", expand=True), ft.Text("NIF", weight="bold", width=100), ft.Text("Ação", weight="bold", width=80)]), padding=10, bgcolor=ft.Colors.GREY_200),
             lista_linhas
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
