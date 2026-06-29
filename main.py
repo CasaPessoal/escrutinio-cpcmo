@@ -36,6 +36,14 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
+    # Sintaxe de borda universal
+    borda_padrao = ft.Border(
+        left=ft.BorderSide(1, ft.Colors.GREY_300),
+        top=ft.BorderSide(1, ft.Colors.GREY_300),
+        right=ft.BorderSide(1, ft.Colors.GREY_300),
+        bottom=ft.BorderSide(1, ft.Colors.GREY_300)
+    )
+
     def render_login():
         page.clean()
         mesa_field = ft.TextField(label="Nome da Mesa", width=300)
@@ -111,17 +119,16 @@ def main(page: ft.Page):
                         ft.FilledButton("VOTAR", on_click=lambda e, i=item["id"], n=nome: (
                             setattr(bs, "data", i), setattr(txt_confirmacao, "value", f"Confirmar voto de: \"{n}\"?"), setattr(bs, "open", True), page.update()
                         ))
-                    ]), padding=5, border=ft.border.all(1, ft.Colors.GREY_300)))
+                    ]), padding=5, border=borda_padrao))
             page.update()
 
-        # Layout fixo montado aqui
         page.add(ft.Column([
             ft.Text("Eleições Casa do Pessoal da CMO (2026-2029)", size=22, weight="bold"),
             ft.Row([
                 ft.Card(ft.Container(ft.Column([ft.Text("Total"), lbl_inscritos], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
                 ft.Card(ft.Container(ft.Column([ft.Text("Votantes"), lbl_votantes], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
                 ft.Card(ft.Container(ft.Column([ft.Text("Abstenção"), lbl_abstencao], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
-                ft.Container(ft.Column([ft.Text("Afluência Por Mesa"), row_progresso_mesas], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10)
+                ft.Container(content=ft.Column([ft.Text("Afluência Por Mesa"), row_progresso_mesas], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=10, border=borda_padrao, border_radius=10)
             ], alignment=ft.MainAxisAlignment.CENTER),
             ft.TextField(label="Pesquisar Eleitor", width=400, on_change=lambda e: carregar_tabela(e.control.value)),
             ft.Container(content=ft.Row([ft.Text("Sócio", weight="bold", width=60), ft.Text("Nome", weight="bold", expand=True), ft.Text("NIF", weight="bold", width=100), ft.Text("Ação", weight="bold", width=80)]), padding=10, bgcolor=ft.Colors.GREY_200),
@@ -130,5 +137,6 @@ def main(page: ft.Page):
         carregar_tabela()
 
     render_login()
+
 if __name__ == "__main__":
     ft.app(target=main, port=int(os.environ.get("PORT", 8080)))
