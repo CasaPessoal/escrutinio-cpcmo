@@ -5,13 +5,13 @@ import flet as ft
 from dotenv import load_dotenv
 from supabase import create_client
 from datetime import datetime
-import asyncio
 
 # --- CONFIGURAÇÃO ---
 load_dotenv()
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# --- FUNÇÕES AUXILIARES ---
+estado_app = {"mesa_autenticada": None}
+
 def remover_acentos(texto):
     if not texto: return ""
     nfkd_form = unicodedata.normalize('NFKD', texto)
@@ -25,14 +25,17 @@ def verificar_login(nome_mesa, password_tentativa):
         return bcrypt.checkpw(password_tentativa.encode('utf-8'), hash_guardado)
     except: return False
 
+def registar_log(id_eleitor, mesa_id):
+    try:
+        log_data = {"eleitor_id": id_eleitor, "mesa_id": mesa_id, "timestamp": datetime.now().isoformat()}
+        supabase.table("logs_votos").insert(log_data).execute()
+    except Exception as e: print(f"Erro ao registar log: {e}")
+
 def main(page: ft.Page):
     page.title = "Escrutínio - Ourique"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    
-    estado_app = {"mesa_autenticada": None}
 
-    # --- UI DE LOGIN ---
     def render_login():
         page.clean()
         mesa_field = ft.TextField(label="Nome da Mesa", width=300)
@@ -54,29 +57,27 @@ def main(page: ft.Page):
             status_text
         ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER))
 
-    # --- UI DE VOTAÇÃO ---
     def render_votacao():
         page.clean()
+        
         lbl_inscritos = ft.Text("0", size=20, weight="bold")
         lbl_votantes = ft.Text("0", size=20, weight="bold", color=ft.Colors.GREEN)
         lbl_abstencao = ft.Text("0%", size=20, weight="bold", color=ft.Colors.RED)
-        campo_pesquisa = ft.TextField(label="Pesquisar Eleitor", width=400)
+        row_progresso_mesas = ft.Row(alignment=ft.MainAxisAlignment.CENTER, wrap=True)
         lista_linhas = ft.Column(scroll=ft.ScrollMode.AUTO, height=400)
         txt_confirmacao = ft.Text("", size=16, weight="bold")
         
         bs = ft.BottomSheet(content=ft.Container(padding=20, content=ft.Column([
             ft.Text("Confirmação de Voto", size=20, weight="bold"), 
             txt_confirmacao, 
-            ft.Row([
-                ft.TextButton("Cancelar", on_click=lambda e: setattr(bs, "open", False) or page.update()), 
-                ft.FilledButton("CONFIRMAR VOTO", on_click=lambda e: processar_voto())
-            ], alignment=ft.MainAxisAlignment.CENTER)
+            ft.Row([ft.TextButton("Cancelar", on_click=lambda e: (setattr(bs, "open", False), page.update())), 
+                    ft.FilledButton("CONFIRMAR VOTO", on_click=lambda e: processar_voto())], alignment=ft.MainAxisAlignment.CENTER)
         ])))
         page.overlay.append(bs)
 
         def processar_voto():
             supabase.table("eleitores").update({"Votou": True, "data_voto": datetime.now().isoformat()}).eq("id", bs.data).execute()
-            campo_pesquisa.value = ""
+            registar_log(bs.data, estado_app["mesa_autenticada"])
             bs.open = False
             carregar_tabela("")
             page.snack_bar = ft.SnackBar(ft.Text("Voto registado com sucesso!"))
@@ -92,6 +93,12 @@ def main(page: ft.Page):
             lbl_votantes.value = str(vot_count)
             lbl_abstencao.value = f"{((total - vot_count) / total * 100):.1f}%" if total > 0 else "0%"
             
+            votos_por_mesa = {}
+            for log in logs: votos_por_mesa[log['mesa_id']] = votos_por_mesa.get(log['mesa_id'], 0) + 1
+            row_progresso_mesas.controls.clear()
+            for mesa, qtd in votos_por_mesa.items():
+                row_progresso_mesas.controls.append(ft.Container(content=ft.Text(f"{mesa}: {(qtd/total*100):.1f}%", size=11), padding=5, bgcolor=ft.Colors.BLUE_50, border_radius=5))
+            
             lista_ordenada = sorted([d for d in dados if not d.get("Votou")], key=lambda x: int(x.get("Num_Socio", 0)) if str(x.get("Num_Socio", 0)).isdigit() else 0)
             lista_linhas.controls.clear()
             for item in lista_ordenada:
@@ -100,28 +107,28 @@ def main(page: ft.Page):
                     lista_linhas.controls.append(ft.Container(content=ft.Row([
                         ft.Text(str(item.get("Num_Socio", "")), width=60), 
                         ft.Text(nome, expand=True), 
+                        ft.Text(str(item.get("NIF", "")), width=100), 
                         ft.FilledButton("VOTAR", on_click=lambda e, i=item["id"], n=nome: (
-                            setattr(bs, "data", i), 
-                            setattr(txt_confirmacao, "value", f"Confirmar voto de: \"{n}\"?"), 
-                            setattr(bs, "open", True), 
-                            page.update()
+                            setattr(bs, "data", i), setattr(txt_confirmacao, "value", f"Confirmar voto de: \"{n}\"?"), setattr(bs, "open", True), page.update()
                         ))
-                    ]), padding=5, border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_300))))
+                    ]), padding=5, border=ft.border.all(1, ft.Colors.GREY_300)))
             page.update()
 
-        campo_pesquisa.on_change = lambda e: carregar_tabela(e.control.value)
+        # Layout fixo montado aqui
         page.add(ft.Column([
-            ft.Text("Escrutínio - Ourique", size=22, weight="bold"),
+            ft.Text("Eleições Casa do Pessoal da CMO (2026-2029)", size=22, weight="bold"),
             ft.Row([
-                ft.Card(ft.Container(ft.Column([ft.Text("Total"), lbl_inscritos]), padding=20)),
-                ft.Card(ft.Container(ft.Column([ft.Text("Votantes"), lbl_votantes]), padding=20)),
+                ft.Card(ft.Container(ft.Column([ft.Text("Total"), lbl_inscritos], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
+                ft.Card(ft.Container(ft.Column([ft.Text("Votantes"), lbl_votantes], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
+                ft.Card(ft.Container(ft.Column([ft.Text("Abstenção"), lbl_abstencao], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=20)),
+                ft.Container(ft.Column([ft.Text("Afluência Por Mesa"), row_progresso_mesas], horizontal_alignment=ft.CrossAxisAlignment.CENTER), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10)
             ], alignment=ft.MainAxisAlignment.CENTER),
-            campo_pesquisa, lista_linhas 
+            ft.TextField(label="Pesquisar Eleitor", width=400, on_change=lambda e: carregar_tabela(e.control.value)),
+            ft.Container(content=ft.Row([ft.Text("Sócio", weight="bold", width=60), ft.Text("Nome", weight="bold", expand=True), ft.Text("NIF", weight="bold", width=100), ft.Text("Ação", weight="bold", width=80)]), padding=10, bgcolor=ft.Colors.GREY_200),
+            lista_linhas
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
         carregar_tabela()
 
     render_login()
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, port=port, view=ft.AppView.WEB_BROWSER)
+    ft.app(target=main, port=int(os.environ.get("PORT", 8080)))
