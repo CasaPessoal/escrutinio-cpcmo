@@ -5,13 +5,11 @@ import flet as ft
 from dotenv import load_dotenv
 from supabase import create_client
 from datetime import datetime
-import asyncio # Necessário para o task background
+import asyncio
 
 # --- CONFIGURAÇÃO ---
 load_dotenv()
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-estado_app = {"mesa_autenticada": None}
 
 def remover_acentos(texto):
     if not texto: return ""
@@ -33,6 +31,9 @@ def registar_log(id_eleitor, mesa_id):
     except Exception as e: print(f"Erro ao registar log: {e}")
 
 def main(page: ft.Page):
+    # Isolamento de estado por sessão
+    estado_app = {"mesa_autenticada": None}
+    
     page.title = "Escrutínio - Ourique"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
@@ -85,13 +86,15 @@ def main(page: ft.Page):
         page.overlay.append(bs)
 
         def processar_voto():
+            mesa_id = estado_app.get("mesa_autenticada")
             supabase.table("eleitores").update({"Votou": True, "data_voto": datetime.now().isoformat()}).eq("id", bs.data).execute()
-            registar_log(bs.data, estado_app["mesa_autenticada"])
+            registar_log(bs.data, mesa_id)
+            
             campo_pesquisa.value = ""
             campo_pesquisa.update()
             bs.open = False
             carregar_tabela("")
-            page.snack_bar = ft.SnackBar(ft.Text("Voto registado com sucesso!"))
+            page.snack_bar = ft.SnackBar(ft.Text(f"Voto registado na {mesa_id}!"))
             page.snack_bar.open = True
             page.update()
 
@@ -100,6 +103,7 @@ def main(page: ft.Page):
             logs = supabase.table("logs_votos").select("mesa_id").execute().data
             total = len(dados)
             vot_count = len(logs)
+            
             lbl_inscritos.value = str(total)
             lbl_votantes.value = str(vot_count)
             lbl_abstencao.value = f"{((total - vot_count) / total * 100):.1f}%" if total > 0 else "0%"
@@ -125,16 +129,13 @@ def main(page: ft.Page):
                     ]), padding=5, border=borda_padrao))
             page.update()
 
-        # Tarefa de background para atualização a cada 5 segundos
         async def auto_refresh():
             while True:
                 await asyncio.sleep(5)
-                # Só carrega se não estivermos no meio de uma confirmação
                 if not bs.open:
                     carregar_tabela(campo_pesquisa.value)
 
         page.run_task(auto_refresh)
-
         campo_pesquisa.on_change = lambda e: carregar_tabela(e.control.value)
         
         page.add(ft.Column([
